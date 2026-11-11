@@ -1,0 +1,7 @@
+.env
+.projects/
+.venv/
+topup.db
+server.log
+__pycache__/
+.git/

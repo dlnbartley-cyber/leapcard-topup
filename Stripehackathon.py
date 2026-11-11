@@ -311,6 +311,17 @@ def shutdown():
     scheduler.shutdown(wait=False)
 
 
+@app.middleware("http")
+async def check_due_schedules(request, call_next):
+    """Serverless safety net: evaluate due schedules on each request so
+    top-ups still fire where no background scheduler can run."""
+    try:
+        run_due_schedules()
+    except Exception:
+        pass
+    return await call_next(request)
+
+
 # ------------------------------------------------------------------- models
 
 class CustomerIn(BaseModel):
