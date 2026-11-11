@@ -1,2 +1,13 @@
+[project]
+name = "leapcard-topup"
+version = "0.1.0"
+requires-python = ">=3.9"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "stripe",
+    "apscheduler==3.10.4",
+]
+
 [tool.vercel]
 entrypoint = "Stripehackathon:app"
