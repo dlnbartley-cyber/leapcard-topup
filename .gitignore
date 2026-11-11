@@ -1,0 +1,10 @@
+.env
+.projects/
+.venv/
+topup.db
+server.log
+__pycache__/
+.DS_Store
+Justin's part
+justin part two.html
+building an agentic commerce solution.py
