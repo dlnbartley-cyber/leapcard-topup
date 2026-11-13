@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Leap Top-Up — Agentic Payments</title>
+<style>
+  :root { --green:#00b36b; --dark:#0e1513; --card:#16211d; --line:#233029;
+          --txt:#e8f0ec; --dim:#8aa396; --amber:#ffb020; --red:#ff5c5c; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--dark); color:var(--txt); font-family:-apple-system,"SF Pro",Helvetica,sans-serif;
+         min-height:100vh; padding:24px; }
+  h1 { font-size:20px; font-weight:600; }
+  .sub { color:var(--dim); font-size:13px; margin-top:2px; }
+  .grid { display:grid; grid-template-columns:360px 1fr; gap:20px; max-width:1180px;
+          margin:24px auto 0; }
+  @media (max-width:900px){ .grid{grid-template-columns:1fr;} }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; }
+  .panel h2 { font-size:13px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim);
+              margin-bottom:12px; }
+  /* leap card */
+  .leapcard { background:linear-gradient(135deg,#00b36b,#00794a); border-radius:16px; padding:20px;
+              color:#fff; position:relative; overflow:hidden; }
+  .leapcard::after { content:""; position:absolute; right:-40px; top:-40px; width:160px; height:160px;
+                     border-radius:50%; background:rgba(255,255,255,.08); }
+  .leapcard .brand { font-size:12px; letter-spacing:.2em; opacity:.8; }
+  .leapcard .balance { font-size:42px; font-weight:700; margin:14px 0 4px; font-variant-numeric:tabular-nums; }
+  .leapcard .num { font-family:ui-monospace,monospace; font-size:13px; opacity:.85; }
+  .leapcard .holder { font-size:12px; opacity:.7; margin-top:14px; }
+  .flash { animation:flash .6s; } @keyframes flash { 0%{background:#2effa8;} }
+  /* controls */
+  label { display:block; font-size:12px; color:var(--dim); margin:10px 0 4px; }
+  input,select { width:100%; background:#0d1412; border:1px solid var(--line); color:var(--txt);
+                 border-radius:8px; padding:9px 10px; font-size:14px; }
+  input:focus,select:focus { outline:none; border-color:var(--green); }
+  button { cursor:pointer; border:none; border-radius:8px; font-size:14px; font-weight:600;
+           padding:9px 14px; }
+  .btn-green { background:var(--green); color:#04150d; }
+  .btn-ghost { background:transparent; border:1px solid var(--line); color:var(--txt); }
+  .btn-amber { background:var(--amber); color:#241a00; }
+  .row { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .fares { display:flex; gap:8px; }
+  .fares button { flex:1; }
+  /* agent */
+  .agent-note { background:rgba(255,176,32,.08); border:1px solid rgba(255,176,32,.3); color:var(--amber);
+                border-radius:8px; padding:10px; font-size:12.5px; margin-top:10px; display:none; }
+  .err { background:rgba(255,92,92,.1); border:1px solid rgba(255,92,92,.4); color:var(--red);
+         border-radius:8px; padding:10px; font-size:12.5px; margin-top:10px; display:none; }
+  /* feed */
+  .tx { display:flex; justify-content:space-between; align-items:center; padding:10px 4px;
+        border-bottom:1px solid var(--line); font-size:13.5px; }
+  .tx:last-child { border:none; }
+  .tag { font-size:10.5px; padding:2px 8px; border-radius:99px; text-transform:uppercase;
+         letter-spacing:.06em; }
+  .tag.agent { background:rgba(255,176,32,.15); color:var(--amber); }
+  .tag.scheduled { background:rgba(0,179,107,.15); color:var(--green); }
+  .tag.fare { background:rgba(138,163,150,.15); color:var(--dim); }
+  .amt { font-family:ui-monospace,monospace; font-variant-numeric:tabular-nums; }
+  .neg { color:var(--dim); } .pos { color:var(--green); }
+  .muted { color:var(--dim); font-size:12px; }
+  .sched { display:flex; justify-content:space-between; align-items:center; padding:8px 0;
+           border-bottom:1px solid var(--line); font-size:13px; }
+  #setup { max-width:460px; margin:80px auto; }
+  .pulse { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--green);
+           margin-right:6px; animation:p 1.6s infinite; }
+  @keyframes p { 50%{opacity:.2;} }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+
+<div id="setup" class="panel">
+  <h1>Set up your Leap Card account</h1>
+  <p class="sub">Creates a customer with a saved Stripe card (test mode — card <code>pm_card_visa</code>).</p>
+  <label>Name</label><input id="s-name" value="Dylan Bartley"/>
+  <label>Email</label><input id="s-email" value="dylan@example.com"/>
+  <label>Leap Card number</label><input id="s-card" value="LEAP-1234-5678"/>
+  <label>Opening balance (€)</label><input id="s-bal" type="number" value="5.00" step="0.5"/>
+  <div class="row"><button class="btn-green" onclick="setup()">Create account</button></div>
+  <div class="err" id="s-err"></div>
+</div>
+
+<div id="app" class="hidden">
+  <div style="max-width:1180px;margin:0 auto;">
+    <h1><span class="pulse"></span>Leap Top-Up <span class="sub" id="backend"></span></h1>
+  </div>
+  <div class="grid">
+    <div>
+      <div class="leapcard" id="leapcard">
+        <div class="brand">LEAP CARD</div>
+        <div class="balance" id="balance">€0.00</div>
+        <div class="num" id="cardnum">----</div>
+        <div class="holder" id="holder"></div>
+      </div>
+      <div class="panel" style="margin-top:16px">
+        <h2>Take a journey</h2>
+        <div class="fares">
+          <button class="btn-ghost" onclick="travel(150)">Luas €1.50</button>
+          <button class="btn-ghost" onclick="travel(230)">Bus €2.30</button>
+          <button class="btn-ghost" onclick="travel(310)">Dart €3.10</button>
+        </div>
+      </div>
+      <div class="panel" style="margin-top:16px">
+        <h2>AI agent <span class="muted">— spends within your mandate</span></h2>
+        <div id="mandate-form">
+          <label>Agent name</label><input id="m-agent" value="travel-agent-v1"/>
+          <label>Max top-up (€)</label><input id="m-max" type="number" value="10" step="1"/>
+          <label>Limit</label>
+          <select id="m-freq"><option value="hourly">1 per hour</option>
+            <option value="daily">1 per day</option><option value="weekly">1 per week</option></select>
+          <div class="row"><button class="btn-amber" onclick="createMandate()">Issue mandate</button></div>
+        </div>
+        <div id="mandate-live" class="hidden">
+          <p class="muted" id="mandate-desc"></p>
+          <div class="row">
+            <input id="a-amt" type="number" value="5" step="1" style="width:90px" title="€"/>
+            <input id="a-reason" placeholder="reason" style="flex:1"/>
+            <button class="btn-amber" onclick="agentTopup()">Agent top-up</button>
+          </div>
+          <div class="agent-note" id="a-note"></div>
+        </div>
+        <div class="err" id="a-err"></div>
+      </div>
+    </div>
+    <div>
+      <div class="panel">
+        <h2>Auto top-up rules</h2>
+        <div class="row" style="margin-top:0">
+          <input id="r-amt" type="number" value="20" step="1" style="width:80px" title="€"/>
+          <select id="r-type" onchange="toggleRule()">
+            <option value="interval">every</option>
+            <option value="low_balance">when balance below</option>
+          </select>
+          <select id="r-interval"><option value="demo">1 min (demo)</option>
+            <option value="daily">day</option><option value="weekly">week</option>
+            <option value="monthly">month</option></select>
+          <input id="r-thresh" type="number" value="4" step="0.5" style="width:80px" class="hidden" title="€ threshold"/>
+          <button class="btn-green" onclick="addSchedule()">Add rule</button>
+        </div>
+        <div id="schedules" style="margin-top:8px"></div>
+      </div>
+      <div class="panel" style="margin-top:16px">
+        <h2>Live activity</h2>
+        <div id="feed"><p class="muted">No transactions yet.</p></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let CID, CARD, MID;
+const eur = c => (c<0?'-':'') + '€' + (Math.abs(c)/100).toFixed(2);
+const show = (id,msg) => { const e=document.getElementById(id); e.style.display=msg?'block':'none'; e.textContent=msg||''; };
+async function api(path, opts){ const r = await fetch(path, opts); const d = await r.json();
+  if(!r.ok) throw {status:r.status, detail:d.detail||r.statusText}; return d; }
+const post = (p,b)=>api(p,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)});
+
+async function setup(){
+  try{
+    const d = await post('/customers',{name:s_name(), email:s_email(), leap_card_number:s_card(),
+      opening_balance_cents:Math.round(parseFloat(document.getElementById('s-bal').value)*100),
+      payment_method:'pm_card_visa'});
+    CID=d.customer_id; CARD=d.leap_card_number;
+    localStorage.setItem('lt',JSON.stringify({CID,CARD}));
+    enter();
+  }catch(e){ show('s-err',e.detail); }
+}
+function s_name(){return document.getElementById('s-name').value}
+function s_email(){return document.getElementById('s-email').value}
+function s_card(){return document.getElementById('s-card').value}
+
+async function enter(){
+  document.getElementById('setup').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  document.getElementById('cardnum').textContent=CARD;
+  const me = await api('/customers/'+CID);
+  document.getElementById('holder').textContent=me.name.toUpperCase();
+  const status = await api('/status').catch(()=>null);
+  document.getElementById('backend').textContent =
+    status ? `· ${status.payments} payments · ${status.database} db` : '';
+  refresh(); setInterval(refresh,3000);
+}
+
+async function refresh(){
+  try{
+    const card = await api('/cards/'+CARD);
+    const bal = document.getElementById('balance');
+    if(bal.textContent!==eur(card.balance_cents)){
+      bal.textContent=eur(card.balance_cents);
+      document.getElementById('leapcard').classList.remove('flash');
+      void document.getElementById('leapcard').offsetWidth;
+      document.getElementById('leapcard').classList.add('flash');
+    }
+    renderFeed(card.transactions||[]);
+    const sched = await api('/schedules');
+    renderSchedules(sched.filter(s=>s.leap_card_number===CARD));
+  }catch(e){}
+}
+
+function renderFeed(txs){
+  const f=document.getElementById('feed');
+  if(!txs.length){f.innerHTML='<p class="muted">No transactions yet.</p>';return;}
+  f.innerHTML=txs.map(t=>`<div class="tx">
+    <span><span class="tag ${t.kind}">${t.kind}</span> <span class="muted">${t.description||''}</span></span>
+    <span class="amt ${t.amount_cents<0?'neg':'pos'}">${eur(t.amount_cents)}</span></div>`).join('');
+}
+
+function renderSchedules(list){
+  const el=document.getElementById('schedules');
+  el.innerHTML=list.map(s=>`<div class="sched">
+    <span>${eur(s.amount_cents)} ${s.schedule_type==='low_balance'?'when < '+eur(s.threshold_cents):'every '+label(s.interval_seconds)}
+      <span class="muted">(${s.status})</span></span>
+    <span>
+      <button class="btn-ghost" onclick="trigger('${s.id}')">Run now</button>
+      <button class="btn-ghost" onclick="setStatus('${s.id}','${s.status==='active'?'paused':'active'}')">${s.status==='active'?'Pause':'Resume'}</button>
+    </span></div>`).join('') || '<p class="muted">No rules yet.</p>';
+}
+const label = s => s>=2592000?'month':s>=604800?'week':s>=86400?'day':'min';
+
+function toggleRule(){
+  const low=document.getElementById('r-type').value==='low_balance';
+  document.getElementById('r-interval').classList.toggle('hidden',low);
+  document.getElementById('r-thresh').classList.toggle('hidden',!low);
+}
+async function addSchedule(){
+  const low=document.getElementById('r-type').value==='low_balance';
+  await post('/schedules',{customer_id:CID,
+    amount_cents:Math.round(parseFloat(document.getElementById('r-amt').value)*100),
+    currency:'eur', schedule_type:low?'low_balance':'interval',
+    interval:low?undefined:document.getElementById('r-interval').value,
+    threshold_cents:low?Math.round(parseFloat(document.getElementById('r-thresh').value)*100):undefined});
+  refresh();
+}
+async function trigger(id){ await post(`/schedules/${id}/trigger`); refresh(); }
+async function setStatus(id,st){ await api(`/schedules/${id}?status=${st}`,{method:'PATCH'}); refresh(); }
+
+async function travel(fare){
+  try{ await post(`/cards/${CARD}/travel`,{fare_cents:fare}); }
+  catch(e){ alert(e.detail); }
+  refresh();
+}
+
+async function createMandate(){
+  try{
+    const m = await post('/agent/mandates',{agent_id:document.getElementById('m-agent').value,
+      customer_id:CID, max_amount_cents:Math.round(parseFloat(document.getElementById('m-max').value)*100),
+      frequency:document.getElementById('m-freq').value});
+    MID=m.id; localStorage.setItem('lt-mid',MID);
+    document.getElementById('mandate-form').classList.add('hidden');
+    document.getElementById('mandate-live').classList.remove('hidden');
+    document.getElementById('mandate-desc').textContent =
+      `${m.agent_id} may charge up to ${eur(m.max_amount_cents)}, once per ${m.frequency} window.`;
+    show('a-note','Mandate issued — the agent can now pay autonomously.');
+  }catch(e){ show('a-err',e.detail); }
+}
+async function agentTopup(){
+  show('a-err');
+  try{
+    await post('/agent/topup',{mandate_id:MID,
+      amount_cents:Math.round(parseFloat(document.getElementById('a-amt').value)*100),
+      reason:document.getElementById('a-reason').value});
+    show('a-note','Agent top-up succeeded.');
+  }catch(e){
+    show('a-err',(e.status===403||e.status===429)?'Blocked by mandate: '+e.detail:e.detail);
+  }
+  refresh();
+}
+
+const saved = localStorage.getItem('lt');
+if(saved){ const s=JSON.parse(saved); CID=s.CID; CARD=s.CARD; MID=localStorage.getItem('lt-mid');
+  if(MID){ document.getElementById('mandate-form').classList.add('hidden');
+    document.getElementById('mandate-live').classList.remove('hidden'); }
+  enter(); }
+</script>
+</body>
+</html>

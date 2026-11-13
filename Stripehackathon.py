@@ -20,6 +20,7 @@ from typing import Optional
 import stripe
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 _BASE = os.path.dirname(os.path.abspath(__file__))
@@ -361,8 +362,13 @@ class TravelIn(BaseModel):
 
 # ----------------------------------------------------------------- endpoints
 
-@app.get("/")
+@app.get("/", response_class=FileResponse)
 def root():
+    return os.path.join(_BASE, "public", "index.html")
+
+
+@app.get("/status")
+def status():
     return {
         "service": "Agentic Top-Up API",
         "payments": "stripe" if STRIPE_SECRET_KEY else "mock",
